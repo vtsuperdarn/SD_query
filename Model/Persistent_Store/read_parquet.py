@@ -25,7 +25,7 @@ class SDParquetUtils(object):
         self.readAllColumns = readAllColumns
         self.readColList = readColList
 
-    def get_data(self, toPandas=True, flattenDF=True, flattenCols=[],**kwargs):
+    def get_data(self, toPandas=True, flattenDF=False, flattenCols=[],**kwargs):
         """
         get the data from the files
         we output the results as either
@@ -52,9 +52,40 @@ class SDParquetUtils(object):
         else:
             # Now flatten the DF. It is difficult to guess which cols
             # are lists, we'll expect the users to give the info!
-            return "yet to do!"
+            if flattenDF:
+                if len(flattenCols) > 0.:
+                    return self.get_flattened_df(table.to_pandas(), flattenCols)
+                print("Need atleast one column to flatten")
+                return None
 
 
+    def get_flattened_df(self, parqDF, flattenCols):
+        """
+        Some of the cols in the original DF are list (for ex vels)
+        so we'll flatten them for easier data manipulation!
+        """
+        def _split_list_to_rows(row,rowList,splitColList):
+            splitRows = {}
+            maxSplit = 0
+            for splitCol in splitColList:
+                split_row = row[splitCol]#.split(row_delimiter)
+                splitRows[splitCol] = split_row
+                if split_row is None:
+                    continue
+                if len(split_row) > maxSplit:
+                    maxSplit = len(split_row)
+                
+            for i in range(maxSplit):
+                nRow = row.to_dict()
+                for splitCol in splitColList:
+                    nRow[splitCol], splitRows[splitCol] =\
+                                splitRows[splitCol][0], splitRows[splitCol][1:]
+                rowList.append(nRow)
+
+        newRows = []
+        parqDF.apply(_split_list_to_rows,axis=1,args = (newRows,flattenCols))
+        outDF = pandas.DataFrame(newRows, columns=parqDF.columns)
+        return outDF
 
 
 if __name__ == "__main__":
@@ -67,6 +98,6 @@ if __name__ == "__main__":
         fList.append( inpDir + startDate.strftime("%Y%m%d") + "fhe.parquet" )
         startDate += datetime.timedelta(days=1)    
     spO = SDParquetUtils(fList)
-    df = spO.get_data(flattenDF=False)
-    print df.head()
-    print df.shape
+    df = spO.get_data(flattenDF=True, flattenCols=["v", "w_l", "p_l"])
+    print( df.head() )
+    print( df.shape )
